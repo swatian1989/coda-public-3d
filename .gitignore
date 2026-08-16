@@ -1,0 +1,20 @@
+# Data and generated outputs are not published. This repository is code only:
+# everything below is reproduced by running the pipeline.
+data/raw/
+data/interim/
+results/
+figures/
+reports/
+logs/
+*.out
+*.npy
+*.svs
+*.tif
+
+# reference values transcribed from the published benchmark are INPUTS, kept
+!data/reference/
+
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.venv/

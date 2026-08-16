@@ -1,0 +1,10 @@
+numpy
+pandas
+scipy
+scikit-image
+pillow
+matplotlib
+pyyaml
+tifffile
+zarr
+pytest

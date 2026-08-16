@@ -1,0 +1,217 @@
+# coda_params.yaml — EVERY parameter from the CODA Online Methods.
+#
+# Kiemen A et al. Nat Methods 2022;19:1490-1499. doi:10.1038/s41592-022-01650-9
+#
+# Values under `locked:` are transcribed from the paper. `guard.py` hashes this
+# block and fails the run if any of it changes. To deviate deliberately, add an
+# entry to `deviations:` with a reason. A deviation that is declared is a
+# methods-section sentence; a deviation that is silent is an irreproducible
+# result.
+
+locked:
+
+  # ------------------------------------------------ tissue acquisition
+  acquisition:
+    section_thickness_um: 4              # sectioned every 4 um
+    he_stain_interval: 3                 # every 3rd section H&E, 2 held out
+    held_out_sections: 2                 # reserved for IHC / spatial omics
+    scan_magnification: 20               # Hamamatsu Nanozoomer
+    lateral_resolution_um: 0.5           # x and y
+    axial_resolution_um: 4               # z, at full sampling
+    axial_resolution_used_um: 12         # 1 in 3 sections processed
+
+  # ------------------------------------------------ registration
+  registration:
+    working_mpp: 8.0                     # OpenSlide reduced copies
+    downsample_interp: nearest           # nearest neighbour
+    registration_mpp: 80.0               # greyscale, Gaussian filtered
+    reference: center_image              # imagen, NOT the neighbour
+    radon_angles_deg: [0, 359]           # discrete degrees
+    n_radon_angles: 360
+    angle_from: cross_correlation_of_radon_transforms
+    translation_from: cross_correlation_of_rotated_images
+    elastic_tile_interval_um: 1500       # 1.5 mm
+    elastic_field_mpp: 8.0
+    field_smoothing_sigma_px: 2          # Gaussian sd 2 pixels
+    n_reference_candidates: 3            # n+/-(m+1), (m+2), (m+3)
+    candidate_selection: pixel_to_pixel_correlation
+    discard_badly_deformed: true         # splitting or folding
+
+  # ------------------------------------------------ registration QC
+  registration_qc:
+    correlation_metric: spearman         # pixelwise
+    sampling_interval_um: 4              # pixels at 4 um intervals from 0
+    max_distance_mm: 0.3
+    reference_ceiling: xy_longitudinal_correlation
+    expected_correlation_retained: 0.95  # skipping up to 4 sections (20 um)
+    expected_error_at_12um: 0.05         # <5% in cell count and composition
+    benchmark_metrics: [TRE, ATRE, RMSE, Jaccard, dA]
+    benchmark_dataset: 260_mouse_prostate_serial_images
+
+  # ------------------------------------------------ cell detection
+  cell_detection:
+    working_mpp: 2.0
+    tissue_mask_rule: low_green_intensity_and_high_rgb_std
+    color_space: optical_density
+    kmeans_clusters: 100
+    hematoxylin_selection: most_common_blue_favored_od
+    eosin_selection: most_common_red_favored_od
+    background_od: inverse_of_mean_of_h_and_e
+    nuclei_from: smoothed_hematoxylin_2d_intensity_minima
+    seconds_per_wsi: 90                  # approximate, reported
+    validation_regions_mm2: 1.5
+    n_validation_regions: 5
+    n_annotators: 2
+    match_radius_um: 2.0                 # average nuclear radius
+    assignment: one_to_one               # a manual point absorbs one detection
+    acceptance_precision: 0.90
+    acceptance_recall: 0.90
+
+  # ------------------------------------------------ semantic segmentation
+  segmentation:
+    working_mpp: 2.0
+    annotation_images_per_sample: 7      # equally spaced
+    annotations_per_class: 50            # minimum, per image
+    annotation_tool: aperio_imagescope_xml
+    stain_normalisation: to_reference_od_of_same_case
+    big_tile_px: 9000
+    big_tile_channels: 3
+    fill_fraction: 0.65                  # >65% full
+    class_balance: approximately_equal_pixels_per_class
+    overlay_order: least_represented_class_first
+    augment_rotation: true
+    augment_scale: [0.8, 1.2]
+    augment_hue_per_channel: [0.8, 1.2]
+    small_tile_px: 500
+    tiles_per_big_tile: 324              # (9000/500)^2
+    n_train_big_tiles: 20                # half augmented
+    n_train_tiles: 6480
+    n_val_big_tiles: 5
+    n_val_tiles: 1620
+    n_test_tiles: 324                    # from an image used for neither
+    backbone: resnet50                   # pretrained
+    architecture: deeplab_v3_plus
+    validation_patience: 5
+    acceptance_precision: 0.90           # per class
+    acceptance_recall: 0.90              # per class
+    on_failure: add_annotations_and_retrain
+    pancreas_classes: [normal_ductal_epithelium, precursors, pdac, smooth_muscle,
+                       acini, fat, collagen, islets_of_langerhans, lymph_nodes]
+    nerve_model_pooling: [smooth_muscle, collagen, other_tissue, white]
+    nerve_supersedes_previous_label: true
+
+  # ------------------------------------------------ 3D reconstruction
+  reconstruction:
+    xy_render_mpp: 2.0
+    z_spacing_um: 12
+    original_voxel_um: [2, 2, 12]
+    isotropic_voxel_um: [12, 12, 12]
+    resample_interp: nearest             # labels, never linear
+    voxel_volume_mm3: 1.728e-6           # 12^3 * 1e-9
+
+  # ------------------------------------------------ quantification
+  quantification:
+    composition_denominator: tissue_voxels_only
+    nuclei_measured_per_subtype: 100     # per case, Aperio ImageScope
+    cell_count_formula: "C3D = sum_images sum_subtypes C_image * 3T / (T + D_subtype)"
+    effective_thickness: section_thickness_plus_nuclear_diameter
+    bulk_density: subtype_3d_count_over_total_tissue_volume
+    local_density: subtype_3d_count_over_subtype_volume
+    nuclear_diameters_um:                # in-situ measured, PANCREAS
+      ductal_epithelium: 4.2
+      panin: 5.5
+      pdac: 6.7
+      smooth_muscle: 4.1
+      islets: 3.4
+      acini: 4.0
+      ecm: 2.5
+      fat: 70.0                          # cell diameter, not nuclear
+
+  # ------------------------------------------------ connectivity
+  connectivity:
+    method: bwlabeln                     # 3D connected components
+    computed_on: [precursors_alone, precursors_plus_normal_ductal_epithelium]
+    morphology_metric: regionprops3_primary_axis_length
+    reported_overcounting_mean_fold: 12.3
+    reported_overcounting_max_fold: 40
+    reported_p_value: 1e-5
+
+  # ------------------------------------------------ fiber alignment
+  fiber_alignment:
+    source_channel: eosin
+    crop_magnification: 20
+    window_area_um2: 2500                # 50 x 50 um
+    locations_per_crop: 2
+    axial_coordinates_per_structure: 3
+    longitudinal_coordinates_per_structure: 3
+    n_samples: 7
+    images_per_structure_type: 42
+    structures: [ductal_epithelium, blood_vessels, nerves]
+    alignment_index_range: [0, 1]        # 1 = fully aligned, 0 = isotropic
+    nuclear_aspect_ratio_cells_per_image: 5
+    nuclear_aspect_ratio_annotators: 2
+    total_cells_measured: 1260
+    reported_fold_change_alignment: [2.5, 2.4, 2.2, 2.2]
+    reported_fold_change_aspect_ratio: [2.1, 2.3, 2.5]
+
+  # ------------------------------------------------ z-projections
+  z_projection:
+    operation: sum_along_z
+    normalisation: divide_by_max
+
+  # ------------------------------------------------ statistics
+  statistics:
+    test: wilcoxon_rank_sum              # ALL statistical analyses
+    sample_size_predetermined: false
+    data_excluded: none
+
+# ============================================================ DEVIATIONS
+# Every entry becomes a row in the deviations table of the manuscript.
+
+deviations:
+  - parameter: implementation_language
+    paper: MATLAB 2021b
+    ours: Python 3.10
+    reason: "No MATLAB licence; CODA repo is MATLAB. Algorithms reimplemented."
+    expected_impact: "Numerical differences at the level of interpolation order."
+
+  - parameter: registration.translation_from
+    paper: cross_correlation_of_rotated_images
+    ours: phase_cross_correlation
+    reason: "Subpixel accuracy and robustness to intensity differences between sections."
+    expected_impact: "Equal or better translation accuracy; verify with TRE."
+
+  - parameter: segmentation.architecture
+    paper: deeplab_v3_plus
+    ours: deeplab_v3_plus_if_smp_else_v3
+    reason: "torchvision ships v3, not v3+. smp provides true v3+."
+    expected_impact: "v3 lacks the decoder; boundary detail is coarser."
+
+  - parameter: cell_detection.nuclei_from
+    paper: smoothed_hematoxylin_2d_intensity_minima
+    ours: distance_transform_watershed
+    reason: "Equivalent formulation with standard tooling."
+    expected_impact: "Validate against manual counts at the 2 um radius before use."
+
+# ============================================================ APPLICABILITY
+# Which stages can run on which data. The runner enforces this.
+
+applicability:
+  serial_required: [registration, registration_qc, reconstruction,
+                    quantification, connectivity]
+  any_h_and_e: [cell_detection, segmentation, fiber_alignment]
+  dab_ihc_only: [marker_quantification, her2_membrane, spatial_statistics]
+  never_on_dab_ihc:
+    - fiber_alignment          # requires an eosin channel; DAB-IHC has none
+  never_on_single_sections:
+    - registration
+    - reconstruction
+    - connectivity
+
+datasets:
+  kartasalo_prostate: {serial: true, n_sections: 260, mpp: 0.46, section_um: 5.0}
+  kartasalo_liver:    {serial: true, n_sections: 47,  mpp: 0.46, section_um: 5.0}
+  acrobat:            {serial: false, mpp: 0.92, has_ihc: true,  has_he: true}
+  tcga:               {serial: false, mpp: 0.25, has_ihc: false, has_he: true}
+  usm_ihc_fov:        {serial: false, mpp: null,  has_ihc: true,  has_he: false,
+                       note: "field-of-view captures; read mpp from the scale bar"}
